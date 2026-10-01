@@ -51,13 +51,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-14 clang-21 lld-21 ninja-build cmake libgtk-3-dev libx11-xcb-dev libfontconfig1-dev libxtst-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxss-dev libxkbcommon-dev libxfixes-dev
           git submodule update --init --depth=1 -j4 $(git config --file .gitmodules --get-regexp path | awk '{print $2}' | grep -v -E 'DirectXShaderCompiler|MoltenVK')
+          ./xenia-build.py fetchdata
       - name: Configure strict real runtime
         env:
           CC: clang-21
           CXX: clang++-21
-        run: cmake -S . -B build-strict -G Ninja -DCMAKE_BUILD_TYPE=Release -DXENIA_STATIC_ONLY=ON -DXENIA_STATIC_SMOKE_TEST=ON -DXENIA_ENABLE_LTO=OFF
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build-strict
+          git rev-parse HEAD | tee build-strict/revision.txt
+          cmake -S . -B build-strict -G Ninja -DCMAKE_BUILD_TYPE=Release -DXENIA_STATIC_ONLY=ON -DXENIA_STATIC_SMOKE_TEST=ON -DXENIA_ENABLE_LTO=OFF 2>&1 | tee build-strict/configure.log
       - name: Build strict application and real-runtime smoke
-        run: cmake --build build-strict --target xenia-app xenia-static-smoke --parallel 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build-strict --target xenia-app xenia-static-smoke --parallel 3 2>&1 | tee build-strict/build.log
       - name: Run real-runtime smoke
         run: ctest --test-dir build-strict -R xenia-static-smoke --output-on-failure
       - name: Check linked CPU backend symbols
@@ -77,3 +86,6 @@ jobs:
           path: |
             build-strict/Testing/Temporary/LastTest.log
             build-strict/static-symbols.txt
+            build-strict/configure.log
+            build-strict/build.log
+            build-strict/revision.txt
