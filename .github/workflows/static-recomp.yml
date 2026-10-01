@@ -2,26 +2,78 @@ name: Static recomp validation
 on:
   push:
     branches: [codex/static-recomp]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: static-recomp-${{ github.ref }}
+  group: static-recomp-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  dependencies:
-    runs-on: ubuntu-24.04
+  portable:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Fetch pinned public build headers
+      - name: Host identity
+        run: uname -a; clang++ --version; python3 --version
+      - name: Prepare independent PPC fixtures
+        if: runner.os == 'Linux'
+        run: python3 tools/static_recomp/tests/prepare_fixtures.py --out build-portable/fixtures
+      - name: Configure and build
         run: |
-          git submodule update --init --depth=1 -j4 third_party/date third_party/fmt third_party/cxxopts third_party/tomlplusplus third_party/xxhash third_party/rapidjson third_party/utfcpp third_party/disruptorplus third_party/capstone third_party/cereal third_party/imgui third_party/Vulkan-Headers third_party/asio third_party/SDL3
-          python3 -m pip install --target tooling clang-format==21.1.8
-          tar --exclude='.git' -czf static-build-inputs.tar.gz third_party/date third_party/fmt third_party/cxxopts third_party/tomlplusplus third_party/xxhash third_party/rapidjson third_party/utfcpp third_party/disruptorplus third_party/capstone third_party/cereal third_party/imgui third_party/Vulkan-Headers third_party/asio third_party/SDL3 tooling/clang_format/data/bin/clang-format
+          cmake -S tools/static_recomp -B build-portable -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++
+          cmake --build build-portable --parallel 3
+      - run: ctest --test-dir build-portable --output-on-failure
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: static-build-inputs
-          path: static-build-inputs.tar.gz
-          retention-days: 3
+          name: static-portable-${{ matrix.os }}
+          path: |
+            build-portable/Testing/Temporary/LastTest.log
+            build-portable/fixtures/selection.json
+  strict-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install ordinary build dependencies
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          sudo apt-add-repository -y "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main"
+          sudo apt-get update
+          sudo apt-get install -y g++-14 clang-21 lld-21 ninja-build cmake libgtk-3-dev libx11-xcb-dev libfontconfig1-dev libxtst-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxss-dev libxkbcommon-dev libxfixes-dev
+          git submodule update --init --depth=1 -j4 $(git config --file .gitmodules --get-regexp path | awk '{print $2}' | grep -v -E 'DirectXShaderCompiler|MoltenVK')
+      - name: Configure strict real runtime
+        env:
+          CC: clang-21
+          CXX: clang++-21
+        run: cmake -S . -B build-strict -G Ninja -DCMAKE_BUILD_TYPE=Release -DXENIA_STATIC_ONLY=ON -DXENIA_STATIC_SMOKE_TEST=ON -DXENIA_ENABLE_LTO=OFF
+      - name: Build strict application and real-runtime smoke
+        run: cmake --build build-strict --target xenia-app xenia-static-smoke --parallel 3
+      - name: Run real-runtime smoke
+        run: ctest --test-dir build-strict -R xenia-static-smoke --output-on-failure
+      - name: Check linked CPU backend symbols
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary=$(find build-strict/bin -type f -name xenia-static-smoke | head -1)
+          test -n "$binary"
+          nm -C "$binary" > build-strict/static-symbols.txt
+          if grep -E 'xe::cpu::backend::(a64|x64)::(A64Backend|X64Backend)' build-strict/static-symbols.txt; then
+            echo 'Unexpected JIT backend in strict binary'; exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: static-real-runtime-validation
+          path: |
+            build-strict/Testing/Temporary/LastTest.log
+            build-strict/static-symbols.txt
