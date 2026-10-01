@@ -1,0 +1,46 @@
+name: Static iOS SDK build
+on:
+  push:
+    branches: [codex/static-recomp]
+    paths:
+      - '.github/workflows/static-ios.yml'
+      - 'tools/static_recomp/build_ios.py'
+      - 'src/xenia/base/platform_arm64.cc'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: static-ios-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  unsigned-device-build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare ordinary public build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+          command -v cmake
+          command -v ninja
+          git submodule update --init --depth=1 -j4 $(git config --file .gitmodules --get-regexp path | awk '{print $2}')
+          git -C third_party/DirectXShaderCompiler submodule update --init --depth=1 external/SPIRV-Headers external/SPIRV-Tools
+          git submodule update --init --recursive --depth=1 -j4 third_party/wxWidgets
+          ./xenia-build.py fetchdata
+          sudo xcodebuild -downloadComponent MetalToolchain
+      - name: Build strict unsigned app with no game modules
+        run: python3 tools/static_recomp/build_ios.py --empty-catalog --build-dir "$RUNNER_TEMP/xenios-static-ios" --jobs 3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: static-ios-build-evidence
+          path: |
+            ${{ runner.temp }}/xenios-static-ios/step-*.log
+            ${{ runner.temp }}/xenios-static-ios/static-build-result.json
+            ${{ runner.temp }}/xenios-static-ios/static-symbols.txt
+          retention-days: 7
