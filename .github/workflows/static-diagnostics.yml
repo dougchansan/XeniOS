@@ -16,10 +16,11 @@ jobs:
         run: |
           set -eu
           mkdir diagnostics
-          gh api repos/dougchansan/XeniOS/actions/jobs/110279330440/logs > diagnostics/strict-linux.log
-          gh api repos/dougchansan/XeniOS/actions/jobs/110279331036/logs > diagnostics/lint.log
+          gh api --allow-escape-sequences repos/dougchansan/XeniOS/actions/jobs/110279330440/logs > diagnostics/strict-linux.log
+          gh api --allow-escape-sequences repos/dougchansan/XeniOS/actions/jobs/110279331036/logs > diagnostics/lint.log
           tail -100 diagnostics/strict-linux.log
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: static-build-diagnostics
           path: diagnostics
