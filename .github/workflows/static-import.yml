@@ -1,0 +1,39 @@
+name: Import validated static backend
+on:
+  push:
+    branches: [codex/static-recomp]
+    paths: ['.github/workflows/static-import.yml']
+permissions:
+  contents: write
+jobs:
+  import:
+    if: github.repository == 'dougchansan/XeniOS' && github.ref == 'refs/heads/codex/static-recomp'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve and verify the fixed source patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/aot-patch.xz
+          for blob in 89d23abc600c77120fb1d59eb85d250e0ebf8df9 7c877d14ac9cb21a0f5808cb8ad1addb3977a6c1 c147b2429af37c373a4bc71e3f2bf5b6a1010acc 5fe62a8258c09c6131d971a5301f0b2c52c34986; do
+            gh api "repos/dougchansan/XeniOS/git/blobs/$blob" --jq .content | base64 --decode >> /tmp/aot-patch.xz
+          done
+          xz -dc /tmp/aot-patch.xz > /tmp/aot.patch
+          echo '1c9dc226ffc5064c4ada1ea701f025ad950b500a2d12e2f37bba608d5ef8e5ce  /tmp/aot.patch' | sha256sum --check
+          # Workflow changes are applied separately through the authorized connector.
+          git apply --check --index --exclude='.github/workflows/static-recomp.yml' /tmp/aot.patch
+          git apply --index --exclude='.github/workflows/static-recomp.yml' /tmp/aot.patch
+          git diff --cached --check
+      - name: Commit source without rewriting existing history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: add strict static PowerPC backend and offline export pipeline'
+          git push origin HEAD:refs/heads/codex/static-recomp
+          echo "Imported source commit: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
