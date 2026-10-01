@@ -13,6 +13,17 @@
 #include "xenia/cpu/processor.h"
 #include "xenia/cpu/thread_state.h"
 #include "xenia/memory.h"
+#include "xenia/base/cvar.h"
+
+// The smoke target deliberately links the runtime libraries without the full
+// frontend executable. emulator.cc references frontend-owned CVars, so provide
+// the same definitions here rather than pulling UI translation units into this
+// headless strict-runtime test.
+DEFINE_string(gpu, "null", "Graphics system.", "GPU");
+DEFINE_string(apu, "nop", "Audio system.", "APU");
+DEFINE_bool(mount_scratch, false, "Mount scratch device.", "VFS");
+DEFINE_bool(mount_cache, false, "Mount cache device.", "VFS");
+DEFINE_bool(mount_memory_unit, false, "Mount memory unit.", "VFS");
 namespace xe::cpu::backend::statik {
 std::span<const aot::Module* const> LinkedModules() {
   static const aot::Module* const modules[]{&SmokeModule()};
