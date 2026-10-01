@@ -756,10 +756,19 @@ X_RESULT KernelState::FinishLoadingUserModule(
                                              module->hash());
   emulator_->on_patch_apply();
   if (module->xex_module()) {
-    module->xex_module()->Precompile();
+    if (!processor()->backend()->PrepareModule(module->xex_module())) {
+      return X_STATUS_UNSUCCESSFUL;
+    }
+    if (processor()->backend()->UsesRuntimeCompiler()) {
+      module->xex_module()->Precompile();
+    }
+  } else if (!processor()->backend()->UsesRuntimeCompiler()) {
+    XELOGE("Static backend requires a supported, validated executable module");
+    return X_STATUS_NOT_SUPPORTED;
   }
 
-  if (module->is_dll_module() && module->entry_point() && call_entry) {
+  if (module->is_dll_module() && module->entry_point() && call_entry &&
+      !processor()->backend()->IsExportOnly()) {
     // Call DllMain(DLL_PROCESS_ATTACH):
     // https://msdn.microsoft.com/en-us/library/windows/desktop/ms682583%28v=vs.85%29.aspx
     uint64_t args[] = {

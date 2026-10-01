@@ -49,7 +49,8 @@ if(XE_PLATFORM_IOS)
     xenia-base
     xenia-core
     xenia-cpu
-    xenia-cpu-backend-a64
+    xenia-cpu-backend-static
+    $<$<NOT:$<BOOL:${XENIA_STATIC_ONLY}>>:xenia-cpu-backend-a64>
     xenia-gpu
     xenia-gpu-metal
     xenia-helper-sdl
@@ -97,7 +98,7 @@ if(XE_PLATFORM_IOS)
     )
   endif()
   target_link_options(xenia-app PRIVATE
-    "-Wl,-u,___clear_cache"
+    "$<$<NOT:$<BOOL:${XENIA_STATIC_ONLY}>>:-Wl,-u,___clear_cache>"
     "-Wl,-rpath,@executable_path/Frameworks"
     "-Wl,-rpath,@loader_path/Frameworks"
   )
@@ -261,10 +262,13 @@ target_link_libraries(xenia-app PRIVATE
 )
 
 # Architecture-specific backend
-if(XE_TARGET_X86_64)
-  target_link_libraries(xenia-app PRIVATE xenia-cpu-backend-x64)
-elseif(XE_TARGET_AARCH64)
-  target_link_libraries(xenia-app PRIVATE xenia-cpu-backend-a64)
+target_link_libraries(xenia-app PRIVATE xenia-cpu-backend-static)
+if(NOT XENIA_STATIC_ONLY)
+  if(XE_TARGET_X86_64)
+    target_link_libraries(xenia-app PRIVATE xenia-cpu-backend-x64)
+  elseif(XE_TARGET_AARCH64)
+    target_link_libraries(xenia-app PRIVATE xenia-cpu-backend-a64)
+  endif()
 endif()
 
 if(WIN32)

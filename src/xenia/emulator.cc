@@ -32,6 +32,7 @@
 #include "xenia/base/system.h"
 #include "xenia/cpu/backend/code_cache.h"
 #include "xenia/cpu/backend/null_backend.h"
+#include "xenia/cpu/backend/static/static_backend.h"
 #include "xenia/cpu/cpu_flags.h"
 #include "xenia/cpu/thread_state.h"
 #include "xenia/gpu/command_processor.h"
@@ -66,9 +67,9 @@
 #include "xenia/vfs/file.h"
 #include "xenia/vfs/virtual_file_system.h"
 
-#if XE_ARCH_AMD64
+#if !XE_STATIC_CPU && XE_ARCH_AMD64
 #include "xenia/cpu/backend/x64/x64_backend.h"
-#elif XE_ARCH_ARM64
+#elif !XE_STATIC_CPU && XE_ARCH_ARM64
 #include "xenia/cpu/backend/a64/a64_backend.h"
 #endif  // XE_ARCH
 
@@ -288,7 +289,7 @@ X_STATUS Emulator::Setup(
   // logical processors.
   xe::threading::EnableAffinityConfiguration();
 
-#if XE_PLATFORM_LINUX
+#if XE_PLATFORM_LINUX && !XE_STATIC_CPU
   // Check if /dev/shm is mounted with noexec. The code cache uses shm_open
   // with PROT_EXEC, which will fail with EPERM on noexec tmpfs mounts.
   {
@@ -332,6 +333,16 @@ X_STATUS Emulator::Setup(
   if (profile_only_mode) {
     backend = std::make_unique<xe::cpu::backend::NullBackend>();
   } else {
+#if XE_STATIC_CPU
+    if (cvars::cpu != "any" && cvars::cpu != "static") {
+      XELOGE("This build contains only the static CPU backend");
+      return X_STATUS_NOT_SUPPORTED;
+    }
+    backend = std::make_unique<xe::cpu::backend::statik::StaticBackend>();
+#else
+    if (cvars::cpu == "static") {
+      backend = std::make_unique<xe::cpu::backend::statik::StaticBackend>();
+    }
 #if XE_ARCH_AMD64
     if (cvars::cpu == "x64") {
       backend.reset(new xe::cpu::backend::x64::X64Backend());
@@ -350,6 +361,7 @@ X_STATUS Emulator::Setup(
 #endif  // XE_ARCH
       }
     }
+#endif  // XE_STATIC_CPU
   }
   if (!backend && !require_cpu_backend_) {
     backend.reset(new xe::cpu::backend::NullBackend());
@@ -1667,6 +1679,10 @@ bool Emulator::ExceptionCallbackThunk(Exception* ex, void* data) {
 bool Emulator::ExceptionCallback(Exception* ex) {
   // Check to see if the exception occurred in guest code.
   auto code_cache = processor()->backend()->code_cache();
+  if (!code_cache) {
+    return false;  // Static code is native host code; never treat it as a JIT
+                   // cache.
+  }
   auto code_base = code_cache->execute_base_address();
   auto code_end = code_base + code_cache->total_size();
 
@@ -1977,6 +1993,10 @@ X_STATUS Emulator::CompleteLaunch(const std::filesystem::path& path,
     return X_STATUS_PROCESS_IS_TERMINATING;
   }
 #endif  // XE_PLATFORM_IOS
+  if (processor_->backend()->IsExportOnly()) {
+    XELOGI("Static image capture completed; guest execution was not started");
+    return X_STATUS_SUCCESS;
+  }
   // Grab the current title ID.
   xex2_opt_execution_info* info = nullptr;
   uint32_t workspace_address = 0;

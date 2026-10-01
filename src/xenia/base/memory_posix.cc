@@ -115,6 +115,9 @@ PageAccess ToXeniaProtectFlags(const char* protection) {
 }
 
 bool IsWritableExecutableMemorySupported() {
+#if XE_STATIC_CPU
+  return false;
+#endif
 #if XE_PLATFORM_APPLE
 #if XE_PLATFORM_IOS
   // iOS app builds don't have MAP_JIT entitlement in this project setup.
@@ -182,6 +185,13 @@ static void InstallCleanupHandlers() {
 
 void* AllocFixed(void* base_address, size_t length,
                  AllocationType allocation_type, PageAccess access) {
+#if XE_STATIC_CPU
+  if (access == PageAccess::kExecuteReadOnly ||
+      access == PageAccess::kExecuteReadWrite) {
+    XELOGE("Static-only build rejected executable-memory request");
+    return nullptr;
+  }
+#endif
   // mmap does not support reserve / commit, so ignore allocation_type.
   uint32_t prot = ToPosixProtectFlags(access);
   int flags = MAP_PRIVATE | MAP_ANONYMOUS;
@@ -273,6 +283,13 @@ bool DeallocFixed(void* base_address, size_t length,
 
 bool Protect(void* base_address, size_t length, PageAccess access,
              PageAccess* out_old_access) {
+#if XE_STATIC_CPU
+  if (access == PageAccess::kExecuteReadOnly ||
+      access == PageAccess::kExecuteReadWrite) {
+    XELOGE("Static-only build rejected executable-memory request");
+    return false;
+  }
+#endif
   if (out_old_access) {
     size_t length_copy = length;
     QueryProtect(base_address, length_copy, *out_old_access);
@@ -397,6 +414,13 @@ bool QueryProtect(void* base_address, size_t& length, PageAccess& access_out) {
 FileMappingHandle CreateFileMappingHandle(const std::filesystem::path& path,
                                           size_t length, PageAccess access,
                                           bool commit) {
+#if XE_STATIC_CPU
+  if (access == PageAccess::kExecuteReadOnly ||
+      access == PageAccess::kExecuteReadWrite) {
+    XELOGE("Static-only build rejected executable-memory request");
+    return kFileMappingHandleInvalid;
+  }
+#endif
 #if XE_PLATFORM_ANDROID
   // TODO(Triang3l): Check if memfd can be used instead on API 30+.
   if (android_ASharedMemory_create_) {
@@ -571,6 +595,13 @@ void CloseFileMappingHandle(FileMappingHandle handle,
 
 void* MapFileView(FileMappingHandle handle, void* base_address, size_t length,
                   PageAccess access, size_t file_offset) {
+#if XE_STATIC_CPU
+  if (access == PageAccess::kExecuteReadOnly ||
+      access == PageAccess::kExecuteReadWrite) {
+    XELOGE("Static-only build rejected executable-memory request");
+    return nullptr;
+  }
+#endif
   uint32_t prot = ToPosixProtectFlags(access);
 
   int flags = MAP_SHARED;

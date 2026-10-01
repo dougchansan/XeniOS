@@ -162,7 +162,7 @@
 
   _jitReadyLabel = [[UILabel alloc] init];
   _jitReadyLabel.translatesAutoresizingMaskIntoConstraints = NO;
-  _jitReadyLabel.text = @"JIT Enabled";
+  _jitReadyLabel.text = (XE_STATIC_CPU ? @"Static CPU (no JIT)" : @"JIT Enabled");
   _jitReadyLabel.textColor = [XeniaTheme textSecondary];
   xe_apply_label_font(_jitReadyLabel, UIFontTextStyleCaption2, 11.0, UIFontWeightSemibold);
   [self addSubview:_jitReadyLabel];
@@ -643,10 +643,10 @@
   _jitAcquired = acquired;
   if (acquired) {
     _jitStatusDot.backgroundColor = [XeniaTheme accent];
-    _jitStatusLabel.text = @"JIT Enabled";
+    _jitStatusLabel.text = (XE_STATIC_CPU ? @"Static CPU (no JIT)" : @"JIT Enabled");
     _jitReadyDot.hidden = NO;
     _jitReadyLabel.hidden = NO;
-    _jitReadyLabel.text = @"JIT Enabled";
+    _jitReadyLabel.text = (XE_STATIC_CPU ? @"Static CPU (no JIT)" : @"JIT Enabled");
     [_jitStatusRing.layer removeAllAnimations];
     _jitStatusRing.alpha = 0;
     xe_add_jit_ring_pulse(_jitReadyRing.layer, @"xenia.jit.ready.pulse", 1.7, 0.5, 2.0);

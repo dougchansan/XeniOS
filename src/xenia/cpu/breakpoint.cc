@@ -63,7 +63,8 @@ GuestFunction* Breakpoint::guest_function() const {
     }
     return nullptr;
   } else {
-    return processor_->backend()->code_cache()->LookupFunction(host_address());
+    auto cache = processor_->backend()->code_cache();
+    return cache ? cache->LookupFunction(host_address()) : nullptr;
   }
 }
 

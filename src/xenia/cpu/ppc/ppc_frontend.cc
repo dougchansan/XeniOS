@@ -26,6 +26,7 @@ void InitializeIfNeeded();
 void CleanupOnShutdown();
 
 void InitializeIfNeeded() {
+#if !XE_STATIC_CPU
   static bool has_initialized = false;
   if (has_initialized) {
     return;
@@ -39,17 +40,22 @@ void InitializeIfNeeded() {
   RegisterEmitCategoryMemory();
 
   atexit(CleanupOnShutdown);
+#endif
 }
 
 void CleanupOnShutdown() {}
 
 PPCFrontend::PPCFrontend(Processor* processor) : processor_(processor) {
+#if !XE_STATIC_CPU
   InitializeIfNeeded();
+#endif
 }
 
 PPCFrontend::~PPCFrontend() {
   // Force cleanup now before we deinit.
+#if !XE_STATIC_CPU
   translator_pool_.Reset();
+#endif
 }
 
 Memory* PPCFrontend::memory() const { return processor_->memory(); }
@@ -122,11 +128,18 @@ bool PPCFrontend::DeclareFunction(GuestFunction* function) {
 
 bool PPCFrontend::DefineFunction(GuestFunction* function,
                                  uint32_t debug_info_flags) {
+#if XE_STATIC_CPU
+  return false;
+#else
+  if (!processor_->backend()->UsesRuntimeCompiler()) {
+    return false;
+  }
   auto translator = translator_pool_.Allocate(this);
   bool result = translator->Translate(function, debug_info_flags);
   translator->Reset();
   translator_pool_.Release(translator);
   return result;
+#endif
 }
 
 }  // namespace ppc

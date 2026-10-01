@@ -34,9 +34,9 @@
 #include "xenia/cpu/xex_module.h"
 
 // TODO(benvanik): based on compiler support
-#if XE_ARCH_AMD64
+#if !XE_STATIC_CPU && XE_ARCH_AMD64
 #include "xenia/cpu/backend/x64/x64_backend.h"
-#elif XE_ARCH_ARM64
+#elif !XE_STATIC_CPU && XE_ARCH_ARM64
 #include "xenia/cpu/backend/a64/a64_backend.h"
 #endif
 
@@ -193,6 +193,7 @@ void Processor::RemoveModule(const std::string_view name) {
                    });
 
   if (itr != modules_.cend()) {
+    backend_->ForgetModule((*itr)->name());
     const std::vector<uint32_t> addressed_functions =
         (*itr)->GetAddressedFunctions();
 
@@ -348,8 +349,12 @@ bool Processor::DemandFunction(Function* function) {
   if (symbol_status == Symbol::Status::kNew) {
     // Symbol is undefined, so define now.
     assert_true(function->is_guest());
-    if (!frontend_->DefineFunction(static_cast<GuestFunction*>(function),
-                                   debug_info_flags_)) {
+    const bool defined =
+        backend_->UsesRuntimeCompiler()
+            ? frontend_->DefineFunction(static_cast<GuestFunction*>(function),
+                                        debug_info_flags_)
+            : backend_->BindFunction(static_cast<GuestFunction*>(function));
+    if (!defined) {
       function->set_status(Symbol::Status::kFailed);
       return false;
     }

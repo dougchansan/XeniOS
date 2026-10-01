@@ -847,6 +847,10 @@ static bool xe_clear_all_shader_caches(uintmax_t* removed_out, std::error_code* 
 // forever when StikDebug / JIT is unavailable.
 // ---------------------------------------------------------------------------
 - (void)startJITPoll {
+#if XE_STATIC_CPU
+  [self onJITAcquired];  // Legacy UI readiness path; no JIT capability is asserted.
+  return;
+#endif
   // Check immediately first.
   if (xe_check_jit_available()) {
     [self onJITAcquired];
@@ -861,6 +865,10 @@ static bool xe_clear_all_shader_caches(uintmax_t* removed_out, std::error_code* 
 }
 
 - (void)pollJIT:(NSTimer*)timer {
+#if XE_STATIC_CPU
+  [self onJITAcquired];
+  return;
+#endif
   if (timer != self.jitPollTimer) {
     return;
   }
@@ -897,7 +905,11 @@ static bool xe_clear_all_shader_caches(uintmax_t* removed_out, std::error_code* 
   self.jitPollTimer = nil;
   self.jitPollTimedOut = NO;
   self.jitAcquired = YES;
+#if XE_STATIC_CPU
+  XELOGI("iOS: static CPU mode ready; title modules are validated at launch");
+#else
   XELOGI("iOS: JIT acquired!");
+#endif
   [self updateJITStatusIndicator];
   [self updateJITAvailabilityUI];
 
@@ -905,7 +917,7 @@ static bool xe_clear_all_shader_caches(uintmax_t* removed_out, std::error_code* 
   std::filesystem::path persisted_path = TakePendingExternalLaunchPathPreference();
   pending_external_launch_path_.clear();
 
-  if ([self consumePendingStikDebugAutomationPrompt]) {
+  if (!XE_STATIC_CPU && [self consumePendingStikDebugAutomationPrompt]) {
     deferred_jit_prompt_queued_launch_path_ = queued_path;
     deferred_jit_prompt_persisted_launch_path_ = persisted_path;
     [self presentStikDebugAutomationPromptWithCompletion:^{
@@ -1891,6 +1903,11 @@ static bool xe_clear_all_shader_caches(uintmax_t* removed_out, std::error_code* 
 }
 
 - (void)updateJITStatusIndicator {
+#if XE_STATIC_CPU
+  [self.launcherOverlayView setJITAcquired:YES];
+  [self.launcherOverlayView setJITStatusText:@"Static CPU (no JIT) — experimental"];
+  return;
+#endif
   [self.launcherOverlayView setJITAcquired:self.jitAcquired];
   if (self.jitAcquired) {
     [self.launcherOverlayView setJITStatusText:@"JIT Enabled"];
@@ -2117,6 +2134,9 @@ static bool xe_clear_all_shader_caches(uintmax_t* removed_out, std::error_code* 
 - (BOOL)requestStikDebugJITHandoffForPendingLaunchPath:(const std::filesystem::path*)launch_path
                                      requirePreference:(BOOL)require_preference
                           promptForAutomationOnSuccess:(BOOL)prompt_for_automation {
+#if XE_STATIC_CPU
+  return NO;
+#endif
   if (require_preference &&
       !GetUserDefaultBool(kXeniaAutoOpenStikDebugOnLaunchPreferenceKey, false)) {
     XELOGI("iOS: Automatic StikDebug handoff skipped (disabled)");
