@@ -2,11 +2,6 @@ name: Static recomp validation
 on:
   push:
     branches: [codex/static-recomp]
-  pull_request:
-    paths:
-      - 'src/xenia/cpu/backend/static/**'
-      - 'tools/static_recomp/**'
-      - '.github/workflows/static-recomp.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,26 +9,19 @@ concurrency:
   group: static-recomp-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  source:
-    runs-on: ubuntu-latest
+  dependencies:
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Archive tracked source for reproducible inspection
-        run: git archive --format=tar.gz --output=source.tar.gz HEAD
+      - name: Fetch pinned public build headers
+        run: |
+          git submodule update --init --depth=1 -j4 third_party/date third_party/fmt third_party/cxxopts third_party/tomlplusplus third_party/xxhash third_party/rapidjson third_party/utfcpp third_party/disruptorplus third_party/capstone third_party/cereal third_party/imgui third_party/Vulkan-Headers third_party/asio third_party/SDL3
+          python3 -m pip install --target tooling clang-format==21.1.8
+          tar --exclude='.git' -czf static-build-inputs.tar.gz third_party/date third_party/fmt third_party/cxxopts third_party/tomlplusplus third_party/xxhash third_party/rapidjson third_party/utfcpp third_party/disruptorplus third_party/capstone third_party/cereal third_party/imgui third_party/Vulkan-Headers third_party/asio third_party/SDL3 tooling/clang_format/data/bin/clang-format
       - uses: actions/upload-artifact@v4
         with:
-          name: static-recomp-source
-          path: source.tar.gz
+          name: static-build-inputs
+          path: static-build-inputs.tar.gz
           retention-days: 3
-  portable:
-    if: false # Enabled when the implementation and test target are committed.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - run: cmake -S tools/static_recomp -B build-static -DCMAKE_BUILD_TYPE=Release
-      - run: cmake --build build-static --parallel 2
-      - run: ctest --test-dir build-static --output-on-failure
