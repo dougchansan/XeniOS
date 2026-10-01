@@ -13,9 +13,11 @@
 
 #include "xenia/base/cvar.h"
 #include "xenia/base/platform.h"
+#if !XE_STATIC_CPU
 #define XBYAK_NO_OP_NAMES
 #include "third_party/xbyak_aarch64/xbyak_aarch64/xbyak_aarch64.h"
 #include "third_party/xbyak_aarch64/xbyak_aarch64/xbyak_aarch64_util.h"
+#endif
 DEFINE_int64(a64_extension_mask, -1LL,
              "Allow the detection and utilization of specific instruction set "
              "features.\n"
@@ -38,6 +40,10 @@ XE_COLD
 XE_NOINLINE
 void InitFeatureFlags() {
   uint64_t feature_flags_ = 0U;
+  // These flags select runtime emitter sequences, not compiled AOT code.
+  // A strict player must not retain the assembler library just for its CPU
+  // feature helper. Compiler-generated AOT code targets its selected ISA.
+#if !XE_STATIC_CPU
   {
     Xbyak_aarch64::util::Cpu cpu_;
 #define TEST_EMIT_FEATURE(emit, ext)                \
@@ -48,6 +54,7 @@ void InitFeatureFlags() {
                       Xbyak_aarch64::util::XBYAK_AARCH64_HWCAP_ATOMIC);
 #undef TEST_EMIT_FEATURE
   }
+#endif
 
   // Detect whether FPCR.FZ flushes denormal float32 inputs to zero.
   // The ARM spec says input flushing is implementation-defined.

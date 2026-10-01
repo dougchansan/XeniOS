@@ -53,7 +53,9 @@ class PPCFrontend {
  private:
   Processor* processor_;
   PPCBuiltins builtins_ = {0};
+#if !XE_STATIC_CPU
   TypePool<PPCTranslator, PPCFrontend*> translator_pool_;
+#endif
 };
 // Checks the state of the global lock and sets scratch to the current MSR
 // value.

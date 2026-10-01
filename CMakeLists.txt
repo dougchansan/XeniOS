@@ -90,8 +90,19 @@ else()
 endif()
 message(STATUS "Target architecture: XE_TARGET_AARCH64=${XE_TARGET_AARCH64} XE_TARGET_X86_64=${XE_TARGET_X86_64} (${_xe_arch_source})")
 
+option(XENIA_STATIC_ONLY "Exclude both runtime CPU JIT backends" OFF)
+option(XENIA_STATIC_SMOKE_TEST "Build headless real-runtime static integration test" OFF)
+set(XENIA_STATIC_MODULES_DIR "" CACHE PATH "Private prelinked AOT catalog directory")
+if(XENIA_STATIC_ONLY)
+  add_compile_definitions(XE_STATIC_CPU=1)
+else()
+  add_compile_definitions(XE_STATIC_CPU=0)
+endif()
 option(XENIA_BUILD_TESTS "Build test suites" OFF)
 option(XENIA_BUILD_MISC "Build misc subprojects (trace viewers, shader compiler, vfs-dump, demos)" OFF)
+if(XENIA_STATIC_ONLY AND (XENIA_BUILD_TESTS OR XENIA_BUILD_MISC))
+  message(FATAL_ERROR "Legacy CPU tests/tools require JIT. Build tools/static_recomp separately for strict tests.")
+endif()
 option(XENIA_ENABLE_LTO "Enable link-time optimization in Release (slow link)" ON)
 option(XENIA_ENABLE_PROFILER "Enable profiler (UI is Debug-only)" OFF)
 option(XENIA_ENABLE_ITRACE "Enable JIT per-instruction tracing to the log (slow)" OFF)
@@ -108,6 +119,10 @@ endif()
 # XENIA_ENABLE_ITRACE / XENIA_ENABLE_DTRACE / XENIA_ENABLE_FTRACE are consumed
 # per-file in the x64 and a64 backend CMakeLists (only the *_tracers.cc TUs read
 # them), so toggling them doesn't trigger a full rebuild.
+
+if(XENIA_STATIC_SMOKE_TEST)
+  enable_testing()
+endif()
 
 if(XENIA_BUILD_TESTS)
   enable_testing()
@@ -144,6 +159,18 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/obj/${XE_PLATFORM_NAME}"
 file(MAKE_DIRECTORY "${PROJECT_SOURCE_DIR}/scratch")
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+# Direct CMake static builds need the same identity header as builds via xb.
+# Reuse the existing generator; never synthesize a successful-looking revision.
+if(XENIA_STATIC_ONLY)
+  execute_process(COMMAND "${Python3_EXECUTABLE}" -c
+    "import runpy,sys; runpy.run_path(sys.argv[1])['generate_version_h'](sys.argv[2])"
+    "${PROJECT_SOURCE_DIR}/xenia-build.py" "${CMAKE_BINARY_DIR}"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" RESULT_VARIABLE _static_version_result)
+  if(NOT _static_version_result EQUAL 0)
+    message(FATAL_ERROR "Could not generate the static build identity header")
+  endif()
+endif()
 
 # Debug/Checked compile against the release CRT (/MD) since the product
 # ships against release-only system DLLs and prebuilts. Force any imported

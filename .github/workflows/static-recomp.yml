@@ -1,0 +1,91 @@
+name: Static recomp validation
+on:
+  push:
+    branches: [codex/static-recomp]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: static-recomp-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  portable:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Host identity
+        run: uname -a; clang++ --version; python3 --version
+      - name: Prepare independent PPC fixtures
+        if: runner.os == 'Linux'
+        run: python3 tools/static_recomp/tests/prepare_fixtures.py --out build-portable/fixtures
+      - name: Configure and build
+        run: |
+          cmake -S tools/static_recomp -B build-portable -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++
+          cmake --build build-portable --parallel 3
+      - run: ctest --test-dir build-portable --output-on-failure
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: static-portable-${{ matrix.os }}
+          path: |
+            build-portable/Testing/Temporary/LastTest.log
+            build-portable/fixtures/selection.json
+  strict-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install ordinary build dependencies
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          sudo apt-add-repository -y "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main"
+          sudo apt-get update
+          sudo apt-get install -y g++-14 clang-21 lld-21 ninja-build cmake libgtk-3-dev libx11-xcb-dev libfontconfig1-dev libxtst-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxss-dev libxkbcommon-dev libxfixes-dev
+          git submodule update --init --depth=1 -j4 $(git config --file .gitmodules --get-regexp path | awk '{print $2}' | grep -v -E 'DirectXShaderCompiler|MoltenVK')
+          ./xenia-build.py fetchdata
+      - name: Configure strict real runtime
+        env:
+          CC: clang-21
+          CXX: clang++-21
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build-strict
+          git rev-parse HEAD | tee build-strict/revision.txt
+          cmake -S . -B build-strict -G Ninja -DCMAKE_BUILD_TYPE=Release -DXENIA_STATIC_ONLY=ON -DXENIA_STATIC_SMOKE_TEST=ON -DXENIA_ENABLE_LTO=OFF 2>&1 | tee build-strict/configure.log
+      - name: Build strict application and real-runtime smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build-strict --target xenia-app xenia-static-smoke --parallel 3 2>&1 | tee build-strict/build.log
+      - name: Run real-runtime smoke
+        run: ctest --test-dir build-strict -R xenia-static-smoke --output-on-failure
+      - name: Check linked CPU backend symbols
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary=$(find build-strict/bin -type f -name xenia-static-smoke | head -1)
+          test -n "$binary"
+          nm -C "$binary" > build-strict/static-symbols.txt
+          if grep -E 'xe::cpu::backend::(a64|x64)::|PPCTranslator::Translate' build-strict/static-symbols.txt; then
+            echo 'Unexpected JIT backend in strict binary'; exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: static-real-runtime-validation
+          path: |
+            build-strict/Testing/Temporary/LastTest.log
+            build-strict/static-symbols.txt
+            build-strict/configure.log
+            build-strict/build.log
+            build-strict/revision.txt

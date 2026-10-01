@@ -55,6 +55,13 @@ class Backend {
 
   virtual bool Initialize(Processor* processor);
 
+  // Static execution binds prelinked entries without constructing an assembler.
+  virtual bool UsesRuntimeCompiler() const { return true; }
+  virtual bool BindFunction(GuestFunction*) { return false; }
+  virtual bool PrepareModule(Module*) { return true; }
+  virtual void ForgetModule(const std::string&) {}
+  virtual bool IsExportOnly() const { return false; }
+
   virtual void* AllocThreadData();
   virtual void FreeThreadData(void* thread_data);
 

@@ -96,6 +96,9 @@ PageAccess ToXeniaProtectFlags(DWORD access) {
 }
 
 bool IsWritableExecutableMemorySupported() {
+#if XE_STATIC_CPU
+  return false;
+#endif
 #ifdef XE_BASE_MEMORY_WIN_USE_DESKTOP_FUNCTIONS
   return true;
 #else
@@ -107,6 +110,13 @@ bool IsWritableExecutableMemorySupported() {
 
 void* AllocFixed(void* base_address, size_t length,
                  AllocationType allocation_type, PageAccess access) {
+#if XE_STATIC_CPU
+  if (access == PageAccess::kExecuteReadOnly ||
+      access == PageAccess::kExecuteReadWrite) {
+    XELOGE("Static-only build rejected executable-memory request");
+    return nullptr;
+  }
+#endif
   DWORD alloc_type = 0;
   switch (allocation_type) {
     case AllocationType::kReserve:
@@ -151,6 +161,13 @@ bool DeallocFixed(void* base_address, size_t length,
 
 bool Protect(void* base_address, size_t length, PageAccess access,
              PageAccess* out_old_access) {
+#if XE_STATIC_CPU
+  if (access == PageAccess::kExecuteReadOnly ||
+      access == PageAccess::kExecuteReadWrite) {
+    XELOGE("Static-only build rejected executable-memory request");
+    return false;
+  }
+#endif
   if (out_old_access) {
     *out_old_access = PageAccess::kNoAccess;
   }
@@ -213,6 +230,13 @@ bool QueryProtect(void* base_address, size_t& length, PageAccess& access_out) {
 FileMappingHandle CreateFileMappingHandle(const std::filesystem::path& path,
                                           size_t length, PageAccess access,
                                           bool commit) {
+#if XE_STATIC_CPU
+  if (access == PageAccess::kExecuteReadOnly ||
+      access == PageAccess::kExecuteReadWrite) {
+    XELOGE("Static-only build rejected executable-memory request");
+    return kFileMappingHandleInvalid;
+  }
+#endif
   DWORD protect =
       ToWin32ProtectFlags(access) | (commit ? SEC_COMMIT : SEC_RESERVE);
   auto full_path = "Local" / path;
@@ -233,6 +257,13 @@ void CloseFileMappingHandle(FileMappingHandle handle,
 
 void* MapFileView(FileMappingHandle handle, void* base_address, size_t length,
                   PageAccess access, size_t file_offset) {
+#if XE_STATIC_CPU
+  if (access == PageAccess::kExecuteReadOnly ||
+      access == PageAccess::kExecuteReadWrite) {
+    XELOGE("Static-only build rejected executable-memory request");
+    return nullptr;
+  }
+#endif
 #ifdef XE_BASE_MEMORY_WIN_USE_DESKTOP_FUNCTIONS
   DWORD target_address_low = static_cast<DWORD>(file_offset);
   DWORD target_address_high = static_cast<DWORD>(file_offset >> 32);

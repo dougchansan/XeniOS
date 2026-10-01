@@ -194,6 +194,7 @@ class XexModule : public xe::cpu::Module {
   static const void* GetSecurityInfo(const xex2_header* header);
 
   const PESection* GetPESection(const char* name);
+  const std::vector<PESection>& pe_sections() const { return pe_sections_; }
 
   uint32_t GetProcAddress(uint16_t ordinal) const;
   uint32_t GetProcAddress(const std::string_view name) const;
