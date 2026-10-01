@@ -11,6 +11,12 @@
 
 DEFINE_string(cpu, "any", "Does nothing. CPU backend [any, x64].", "CPU");
 
+// Also used by XEX metadata analysis, which is retained in strict builds.
+DEFINE_bool(disable_context_promotion, false,
+            "Disables Context Promotion optimizations, this may be needed for "
+            "some sports games, but will reduce performance.",
+            "CPU");
+
 DEFINE_string(
     load_module_map, "",
     "Loads a .map for symbol names and to diff with the generated symbol "

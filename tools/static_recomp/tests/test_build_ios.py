@@ -13,6 +13,18 @@ SPEC.loader.exec_module(driver)
 
 
 class BuildDriverTests(unittest.TestCase):
+    def test_symbol_gate_rejects_runtime_cpu_compilation(self):
+        static = 'xe::cpu::backend::statik::StaticBackend::Execute'
+        driver.validate_symbols(static + '\nMetalShaderCompiler\nXbyak::util::Cpu')
+        for symbol in ('a64::A64Backend::Initialize', 'a64::A64Emitter::Emit',
+                       'x64::X64Backend::Initialize', 'x64::X64CodeCache::PlaceCode'):
+            with self.subTest(symbol=symbol), self.assertRaises(ValueError):
+                driver.validate_symbols(static + '\nxe::cpu::backend::' + symbol)
+        with self.assertRaises(ValueError):
+            driver.validate_symbols(static + '\nxe::cpu::ppc::PPCTranslator::Translate')
+        with self.assertRaises(ValueError):
+            driver.validate_symbols('MetalShaderCompiler')
+
     def test_device_strict_configuration(self):
         with tempfile.TemporaryDirectory() as root:
             root = pathlib.Path(root)

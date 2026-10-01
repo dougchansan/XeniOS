@@ -17,6 +17,13 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
+def validate_symbols(symbols: str) -> None:
+    if 'statik::StaticBackend' not in symbols:
+        raise ValueError('Cannot positively identify the static backend in the binary')
+    if re.search(r'backend::(?:a64|x64)::|PPCTranslator::Translate', symbols):
+        raise ValueError('Unexpected runtime CPU compilation symbols in the strict app')
+
+
 def commands(build: pathlib.Path, catalog: pathlib.Path | None, jobs: int):
     """Use the upstream host shader tool and the device-only Xcode generator."""
     configure = [
@@ -102,10 +109,7 @@ def main(argv=None) -> int:
         symbols = subprocess.run(['xcrun', 'nm', '-C', str(binary)],
                                  check=True, capture_output=True, text=True).stdout
         (build / 'static-symbols.txt').write_text(symbols)
-        if 'statik::StaticBackend' not in symbols:
-            raise ValueError('Cannot positively identify the static backend in the binary')
-        if re.search(r'backend::(?:a64::A64Backend|x64::X64Backend)::', symbols):
-            raise ValueError('Unexpected CPU JIT backend symbols in the strict app')
+        validate_symbols(symbols)
         record['build_completed'] = True
         record['app_bundle'] = str(app)
         record_path.write_text(json.dumps(record, indent=2) + '\n')

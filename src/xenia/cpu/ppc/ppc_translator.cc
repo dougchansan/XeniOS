@@ -29,10 +29,7 @@
 DEFINE_bool(dump_translated_hir_functions, false, "dumps translated hir",
             "CPU");
 
-DEFINE_bool(disable_context_promotion, false,
-            "Disables Context Promotion optimizations, this may be needed for "
-            "some sports games, but will reduce performance.",
-            "CPU");
+DECLARE_bool(disable_context_promotion);
 
 DECLARE_bool(debug);
 

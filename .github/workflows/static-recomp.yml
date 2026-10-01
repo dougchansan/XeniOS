@@ -76,7 +76,7 @@ jobs:
           binary=$(find build-strict/bin -type f -name xenia-static-smoke | head -1)
           test -n "$binary"
           nm -C "$binary" > build-strict/static-symbols.txt
-          if grep -E 'xe::cpu::backend::(a64|x64)::(A64Backend|X64Backend)' build-strict/static-symbols.txt; then
+          if grep -E 'xe::cpu::backend::(a64|x64)::|PPCTranslator::Translate' build-strict/static-symbols.txt; then
             echo 'Unexpected JIT backend in strict binary'; exit 1
           fi
       - uses: actions/upload-artifact@v4
