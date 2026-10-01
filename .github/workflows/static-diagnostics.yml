@@ -1,0 +1,26 @@
+name: Static build diagnostics
+on:
+  push:
+    branches: [codex/static-recomp]
+    paths: ['.github/workflows/static-diagnostics.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Collect the completed configuration and lint logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          mkdir diagnostics
+          gh api repos/dougchansan/XeniOS/actions/jobs/110279330440/logs > diagnostics/strict-linux.log
+          gh api repos/dougchansan/XeniOS/actions/jobs/110279331036/logs > diagnostics/lint.log
+          tail -100 diagnostics/strict-linux.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: static-build-diagnostics
+          path: diagnostics
+          retention-days: 3
